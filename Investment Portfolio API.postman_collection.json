@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "6f4f1809-0f98-4c6f-b019-2d67500676c3",
     "name": "Investment Portfolio API",
-    "description": "Postman collection for manually testing the Investment Portfolio API flow.",
+    "description": "Postman collection for manually testing the wallet-based Investment Portfolio API flow.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -20,6 +20,10 @@
     },
     {
       "key": "token",
+      "value": ""
+    },
+    {
+      "key": "wallet_id",
       "value": ""
     },
     {
@@ -145,7 +149,153 @@
       }
     },
     {
-      "name": "4. Create Asset",
+      "name": "4. List Wallets",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('list wallets status is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const data = pm.response.json();",
+              "if (Array.isArray(data) && data.length > 0 && !pm.collectionVariables.get('wallet_id')) {",
+              "    pm.collectionVariables.set('wallet_id', data[0].id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/wallets",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "wallets"
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Create Wallet",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create wallet status is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "const data = pm.response.json();",
+              "if (data.id) {",
+              "    pm.collectionVariables.set('wallet_id', data.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Growth Wallet\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/wallets",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "wallets"
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Get Wallet By ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "wallets",
+            "{{wallet_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "7. Update Wallet",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Growth Wallet Updated\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "wallets",
+            "{{wallet_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "8. Create Asset",
       "event": [
         {
           "listen": "test",
@@ -194,7 +344,7 @@
       }
     },
     {
-      "name": "5. List Assets",
+      "name": "9. List Assets",
       "request": {
         "method": "GET",
         "header": [
@@ -227,7 +377,7 @@
       }
     },
     {
-      "name": "6. Get Asset By ID",
+      "name": "10. Get Asset By ID",
       "request": {
         "method": "GET",
         "header": [
@@ -251,39 +401,7 @@
       }
     },
     {
-      "name": "7. Update Asset Price",
-      "request": {
-        "method": "PUT",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{token}}"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"current_price\": 195.75\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/v1/assets/{{asset_id}}",
-          "host": [
-            "{{base_url}}"
-          ],
-          "path": [
-            "api",
-            "v1",
-            "assets",
-            "{{asset_id}}"
-          ]
-        }
-      }
-    },
-    {
-      "name": "8. Create Buy Transaction",
+      "name": "11. Create Buy Transaction In Wallet",
       "event": [
         {
           "listen": "test",
@@ -319,20 +437,22 @@
           "raw": "{\n  \"asset_id\": \"{{asset_id}}\",\n  \"transaction_type\": \"buy\",\n  \"quantity\": 10,\n  \"price_per_unit\": 189.50\n}"
         },
         "url": {
-          "raw": "{{base_url}}/api/v1/transactions",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/transactions",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
+            "wallets",
+            "{{wallet_id}}",
             "transactions"
           ]
         }
       }
     },
     {
-      "name": "9. Create Sell Transaction",
+      "name": "12. Create Sell Transaction In Wallet",
       "event": [
         {
           "listen": "test",
@@ -368,20 +488,22 @@
           "raw": "{\n  \"asset_id\": \"{{asset_id}}\",\n  \"transaction_type\": \"sell\",\n  \"quantity\": 2,\n  \"price_per_unit\": 195.75\n}"
         },
         "url": {
-          "raw": "{{base_url}}/api/v1/transactions",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/transactions",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
+            "wallets",
+            "{{wallet_id}}",
             "transactions"
           ]
         }
       }
     },
     {
-      "name": "10. List Transactions",
+      "name": "13. List Wallet Transactions",
       "request": {
         "method": "GET",
         "header": [
@@ -391,20 +513,32 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/transactions",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/transactions?skip=0&limit=10",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
+            "wallets",
+            "{{wallet_id}}",
             "transactions"
+          ],
+          "query": [
+            {
+              "key": "skip",
+              "value": "0"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
           ]
         }
       }
     },
     {
-      "name": "11. Filter Buy Transactions",
+      "name": "14. Filter Buy Transactions In Wallet",
       "request": {
         "method": "GET",
         "header": [
@@ -414,13 +548,15 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/transactions?transaction_type=buy&asset_id={{asset_id}}",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/transactions?transaction_type=buy&asset_id={{asset_id}}",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
+            "wallets",
+            "{{wallet_id}}",
             "transactions"
           ],
           "query": [
@@ -437,7 +573,7 @@
       }
     },
     {
-      "name": "12. Get Buy Transaction By ID",
+      "name": "15. Get Buy Transaction By ID",
       "request": {
         "method": "GET",
         "header": [
@@ -447,13 +583,15 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/transactions/{{buy_transaction_id}}",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/transactions/{{buy_transaction_id}}",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
+            "wallets",
+            "{{wallet_id}}",
             "transactions",
             "{{buy_transaction_id}}"
           ]
@@ -461,7 +599,7 @@
       }
     },
     {
-      "name": "13. Portfolio Summary",
+      "name": "16. Wallet Summary",
       "request": {
         "method": "GET",
         "header": [
@@ -471,21 +609,22 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/portfolio/summary",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/summary",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
-            "portfolio",
+            "wallets",
+            "{{wallet_id}}",
             "summary"
           ]
         }
       }
     },
     {
-      "name": "14. Delete Sell Transaction",
+      "name": "17. Delete Sell Transaction",
       "request": {
         "method": "DELETE",
         "header": [
@@ -495,13 +634,15 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/transactions/{{sell_transaction_id}}",
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}/transactions/{{sell_transaction_id}}",
           "host": [
             "{{base_url}}"
           ],
           "path": [
             "api",
             "v1",
+            "wallets",
+            "{{wallet_id}}",
             "transactions",
             "{{sell_transaction_id}}"
           ]
@@ -509,7 +650,31 @@
       }
     },
     {
-      "name": "15. Delete Asset",
+      "name": "18. Delete Wallet",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/wallets/{{wallet_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "wallets",
+            "{{wallet_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "19. Delete Asset",
       "request": {
         "method": "DELETE",
         "header": [

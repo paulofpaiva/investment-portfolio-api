@@ -116,3 +116,38 @@ def test_access_without_token_returns_400(client: TestClient) -> None:
         "error_code": "AUTH_TOKEN_REQUIRED",
         "status_code": 400,
     }
+
+
+def test_assets_remain_global_across_multiple_wallets(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    default_wallet: dict[str, str | bool],
+) -> None:
+    second_wallet = client.post("/api/v1/wallets/", json={"name": "Income Wallet"}, headers=auth_headers).json()
+    asset = client.post("/api/v1/assets/", json=create_asset_payload("TSLA"), headers=auth_headers).json()
+
+    first_response = client.post(
+        f"/api/v1/wallets/{default_wallet['id']}/transactions",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "buy",
+            "quantity": 2,
+            "price_per_unit": 250.00,
+        },
+        headers=auth_headers,
+    )
+    second_response = client.post(
+        f"/api/v1/wallets/{second_wallet['id']}/transactions",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "buy",
+            "quantity": 3,
+            "price_per_unit": 255.00,
+        },
+        headers=auth_headers,
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    assert first_response.json()["asset_id"] == asset["id"]
+    assert second_response.json()["asset_id"] == asset["id"]

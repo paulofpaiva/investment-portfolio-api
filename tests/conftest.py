@@ -62,3 +62,10 @@ def auth_headers(client: TestClient, user_credentials: dict[str, str]) -> dict[s
     response = client.post("/api/v1/auth/register", json=user_credentials)
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def default_wallet(client: TestClient, auth_headers: dict[str, str]) -> dict[str, str | bool]:
+    response = client.get("/api/v1/wallets/", headers=auth_headers)
+    wallets = response.json()
+    return wallets[0]
