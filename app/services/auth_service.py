@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 class AuthService:
@@ -39,7 +40,14 @@ class AuthService:
             hashed_password=hash_password(payload.password),
         )
         self.db.add(user)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is already registered.",
+            ) from exc
         self.db.refresh(user)
         return user
 
@@ -47,7 +55,7 @@ class AuthService:
         user = self.get_user_by_email(email)
         if user is None or not verify_password(password, user.hashed_password):
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid credentials.",
             )
         return user
@@ -61,14 +69,19 @@ def get_auth_service(db: Annotated[Session, Depends(get_db)]) -> AuthService:
 
 
 def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
+        status_code=status.HTTP_400_BAD_REQUEST,
         detail="Could not validate credentials.",
-        headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authentication token is required.",
+        )
 
     try:
         payload = decode_access_token(token)
