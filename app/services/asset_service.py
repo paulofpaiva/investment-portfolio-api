@@ -22,7 +22,7 @@ class AssetService:
         asset = self.db.get(Asset, asset_id)
         if asset is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Asset not found.",
             )
         return asset

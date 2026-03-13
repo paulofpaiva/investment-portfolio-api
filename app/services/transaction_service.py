@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -54,7 +55,7 @@ class TransactionService:
         transaction = self.db.execute(statement).scalar_one_or_none()
         if transaction is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Transaction not found.",
             )
         return transaction
@@ -63,20 +64,34 @@ class TransactionService:
         asset = self.db.get(Asset, payload.asset_id)
         if asset is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Asset not found.",
             )
 
         transaction = Transaction(user_id=user_id, **payload.model_dump())
         self.db.add(transaction)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unable to create transaction.",
+            ) from exc
         self.db.refresh(transaction)
         return self.get_transaction_by_id(transaction.id, user_id)
 
     def delete_transaction(self, transaction_id: UUID, user_id: UUID) -> None:
         transaction = self.get_transaction_by_id(transaction_id, user_id)
         self.db.delete(transaction)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unable to delete transaction.",
+            ) from exc
 
     def get_portfolio_summary(self, user_id: UUID) -> PortfolioSummaryResponse:
         statement: Select[tuple[Transaction]] = (
