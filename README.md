@@ -2,7 +2,7 @@
 
 REST API for investment portfolio management built with FastAPI, PostgreSQL, SQLAlchemy, Alembic, and Docker.
 
-## Stack
+## Tech Stack
 
 - Python
 - FastAPI
@@ -10,23 +10,39 @@ REST API for investment portfolio management built with FastAPI, PostgreSQL, SQL
 - SQLAlchemy
 - Alembic
 - Docker
-- Pytest
 
-## Architecture
+## Build and Run
 
-The project follows a layered architecture with clear separation between:
+### Docker
 
-- `api`: endpoints and routing
-- `core`: settings and security
-- `db`: engine, session, and declarative base
-- `models`: ORM entities
-- `schemas`: input and output contracts
-- `services`: business rules
-- `tests`: automated tests
+```bash
+docker compose up --build
+```
 
-## Running the Project
+API: `http://localhost:8000`  
+Docs: `http://localhost:8000/docs`
 
-### Locally
+### Local CLI
+
+1. Start only the database:
+
+```bash
+docker compose up -d db
+```
+
+2. Create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+3. Update `DATABASE_URL` in `.env` to use `localhost`:
+
+```env
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/investment_portfolio
+```
+
+4. Install dependencies and run the API:
 
 ```bash
 python -m venv .venv
@@ -35,16 +51,5 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### With Docker
-
-```bash
-docker compose up --build
-```
-
-## Next Steps
-
-- Configure application settings with `pydantic-settings`
-- Implement JWT authentication
-- Create the initial models and migrations
-- Build auth, assets, and transactions endpoints
-- Cover the main flows with automated tests
+API: `http://localhost:8000`  
+Docs: `http://localhost:8000/docs`
