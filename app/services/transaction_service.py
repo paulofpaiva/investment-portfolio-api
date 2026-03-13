@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -7,7 +8,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.asset import Asset
 from app.models.transaction import Transaction, TransactionType
-from app.schemas.transaction import TransactionCreate
+from app.schemas.transaction import (
+    PortfolioAssetSummary,
+    PortfolioSummaryResponse,
+    TransactionCreate,
+)
 
 
 class TransactionService:
@@ -72,3 +77,91 @@ class TransactionService:
         transaction = self.get_transaction_by_id(transaction_id, user_id)
         self.db.delete(transaction)
         self.db.commit()
+
+    def get_portfolio_summary(self, user_id: UUID) -> PortfolioSummaryResponse:
+        statement: Select[tuple[Transaction]] = (
+            select(Transaction)
+            .options(joinedload(Transaction.asset))
+            .where(Transaction.user_id == user_id)
+            .order_by(Transaction.transacted_at.asc(), Transaction.created_at.asc())
+        )
+        transactions = list(self.db.execute(statement).scalars().all())
+
+        holdings: dict[UUID, dict[str, Decimal | Asset]] = {}
+
+        for transaction in transactions:
+            asset_state = holdings.setdefault(
+                transaction.asset_id,
+                {
+                    "asset": transaction.asset,
+                    "quantity": Decimal("0"),
+                    "invested": Decimal("0"),
+                },
+            )
+
+            quantity = Decimal(transaction.quantity)
+            price_per_unit = Decimal(transaction.price_per_unit)
+            current_quantity = Decimal(asset_state["quantity"])
+            current_invested = Decimal(asset_state["invested"])
+
+            if transaction.transaction_type == TransactionType.BUY:
+                asset_state["quantity"] = current_quantity + quantity
+                asset_state["invested"] = current_invested + (quantity * price_per_unit)
+                continue
+
+            if current_quantity <= 0:
+                continue
+
+            sell_quantity = min(quantity, current_quantity)
+            average_price = current_invested / current_quantity if current_quantity > 0 else Decimal("0")
+            asset_state["quantity"] = current_quantity - sell_quantity
+            asset_state["invested"] = current_invested - (sell_quantity * average_price)
+
+        asset_summaries: list[PortfolioAssetSummary] = []
+        total_invested = Decimal("0")
+        total_current_value = Decimal("0")
+
+        for asset_state in holdings.values():
+            total_quantity = Decimal(asset_state["quantity"])
+            invested = Decimal(asset_state["invested"])
+
+            if total_quantity <= 0:
+                continue
+
+            asset = asset_state["asset"]
+            if not isinstance(asset, Asset):
+                continue
+
+            average_price = invested / total_quantity if total_quantity > 0 else Decimal("0")
+            current_price = Decimal(asset.current_price)
+            current_value = total_quantity * current_price
+            profit_loss = current_value - invested
+            profit_loss_pct = (
+                (profit_loss / invested) * Decimal("100")
+                if invested > 0
+                else Decimal("0")
+            )
+
+            asset_summaries.append(
+                PortfolioAssetSummary(
+                    ticker=asset.ticker,
+                    total_quantity=total_quantity,
+                    average_price=average_price,
+                    current_price=current_price,
+                    current_value=current_value,
+                    profit_loss=profit_loss,
+                    profit_loss_pct=profit_loss_pct,
+                )
+            )
+
+            total_invested += invested
+            total_current_value += current_value
+
+        total_profit_loss = total_current_value - total_invested
+
+        return PortfolioSummaryResponse(
+            assets=sorted(asset_summaries, key=lambda item: item.ticker),
+            total_invested=total_invested,
+            total_current_value=total_current_value,
+            total_profit_loss=total_profit_loss,
+        )

@@ -28,3 +28,20 @@ class TransactionResponse(BaseModel):
     created_at: datetime
     asset_ticker: str
     asset_name: str
+
+
+class PortfolioAssetSummary(BaseModel):
+    ticker: str
+    total_quantity: Decimal
+    average_price: Decimal
+    current_price: Decimal
+    current_value: Decimal
+    profit_loss: Decimal
+    profit_loss_pct: Decimal
+
+
+class PortfolioSummaryResponse(BaseModel):
+    assets: list[PortfolioAssetSummary]
+    total_invested: Decimal
+    total_current_value: Decimal
+    total_profit_loss: Decimal
