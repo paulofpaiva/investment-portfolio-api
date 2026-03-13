@@ -21,7 +21,11 @@ class Transaction(Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     asset_id: Mapped[UUID] = mapped_column(ForeignKey("assets.id"), nullable=False, index=True)
     transaction_type: Mapped[TransactionType] = mapped_column(
-        SqlEnum(TransactionType, name="transaction_type_enum"),
+        SqlEnum(
+            TransactionType,
+            name="transaction_type_enum",
+            values_callable=lambda enum_class: [item.value for item in enum_class],
+        ),
         nullable=False,
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)

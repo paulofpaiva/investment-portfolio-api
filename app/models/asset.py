@@ -22,7 +22,11 @@ class Asset(Base):
     ticker: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     asset_type: Mapped[AssetType] = mapped_column(
-        SqlEnum(AssetType, name="asset_type_enum"),
+        SqlEnum(
+            AssetType,
+            name="asset_type_enum",
+            values_callable=lambda enum_class: [item.value for item in enum_class],
+        ),
         nullable=False,
     )
     current_price: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
