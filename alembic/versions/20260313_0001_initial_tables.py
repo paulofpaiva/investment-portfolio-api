@@ -17,8 +17,8 @@ branch_labels = None
 depends_on = None
 
 
-asset_type_enum = sa.Enum("stock", "crypto", "fii", name="asset_type_enum")
-transaction_type_enum = sa.Enum("buy", "sell", name="transaction_type_enum")
+asset_type_enum = sa.Enum("stock", "crypto", "fii", name="asset_type_enum", create_type=False)
+transaction_type_enum = sa.Enum("buy", "sell", name="transaction_type_enum", create_type=False)
 
 
 def upgrade() -> None:
