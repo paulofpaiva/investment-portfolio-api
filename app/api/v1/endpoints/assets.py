@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.common import PaginatedResponse
 from app.schemas.asset import AssetCreate, AssetResponse, AssetUpdate
 from app.services.asset_service import AssetService
 from app.services.auth_service import get_current_user
@@ -14,15 +15,16 @@ from app.services.auth_service import get_current_user
 router = APIRouter(prefix="/assets", tags=["assets"])
 
 
-@router.get("/", response_model=list[AssetResponse])
+@router.get("/", response_model=PaginatedResponse[AssetResponse])
 def list_assets(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     _current_user: User = Depends(get_current_user),
-) -> list[AssetResponse]:
+) -> PaginatedResponse[AssetResponse]:
     service = AssetService(db)
-    return service.list_assets(skip=skip, limit=limit)
+    items, total = service.list_assets(skip=skip, limit=limit)
+    return PaginatedResponse[AssetResponse](items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)

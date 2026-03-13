@@ -3,8 +3,8 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.asset import Asset
@@ -20,20 +20,15 @@ class TransactionService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_transactions(
+    def _build_filtered_transactions_query(
         self,
         user_id: UUID,
         asset_id: UUID | None = None,
         transaction_type: TransactionType | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-    ) -> list[Transaction]:
-        statement: Select[tuple[Transaction]] = (
-            select(Transaction)
-            .options(joinedload(Transaction.asset))
-            .where(Transaction.user_id == user_id)
-            .order_by(Transaction.transacted_at.desc())
-        )
+    ) -> Select[tuple[Transaction]]:
+        statement: Select[tuple[Transaction]] = select(Transaction).where(Transaction.user_id == user_id)
 
         if asset_id is not None:
             statement = statement.where(Transaction.asset_id == asset_id)
@@ -44,7 +39,37 @@ class TransactionService:
         if end_date is not None:
             statement = statement.where(Transaction.transacted_at <= end_date)
 
-        return list(self.db.execute(statement).scalars().all())
+        return statement
+
+    def list_transactions(
+        self,
+        user_id: UUID,
+        asset_id: UUID | None = None,
+        transaction_type: TransactionType | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[Transaction], int]:
+        base_statement = self._build_filtered_transactions_query(
+            user_id=user_id,
+            asset_id=asset_id,
+            transaction_type=transaction_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        items_statement = (
+            base_statement
+            .options(joinedload(Transaction.asset))
+            .order_by(Transaction.transacted_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        total_statement = select(func.count()).select_from(base_statement.subquery())
+
+        items = list(self.db.execute(items_statement).scalars().all())
+        total = int(self.db.execute(total_statement).scalar_one())
+        return items, total
 
     def get_transaction_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction:
         statement = (

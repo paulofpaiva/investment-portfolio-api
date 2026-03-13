@@ -1,8 +1,8 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.asset import Asset
@@ -14,9 +14,13 @@ class AssetService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_assets(self, skip: int = 0, limit: int = 100) -> list[Asset]:
-        statement = select(Asset).offset(skip).limit(limit)
-        return list(self.db.execute(statement).scalars().all())
+    def list_assets(self, skip: int = 0, limit: int = 100) -> tuple[list[Asset], int]:
+        items_statement = select(Asset).order_by(Asset.created_at.desc()).offset(skip).limit(limit)
+        total_statement = select(func.count()).select_from(Asset)
+
+        items = list(self.db.execute(items_statement).scalars().all())
+        total = int(self.db.execute(total_statement).scalar_one())
+        return items, total
 
     def get_asset_by_id(self, asset_id: UUID) -> Asset:
         asset = self.db.get(Asset, asset_id)

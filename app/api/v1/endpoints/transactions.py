@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.transaction import TransactionType
 from app.models.user import User
+from app.schemas.common import PaginatedResponse
 from app.schemas.transaction import TransactionCreate, TransactionResponse
 from app.services.auth_service import get_current_user
 from app.services.transaction_service import TransactionService
@@ -15,23 +16,28 @@ from app.services.transaction_service import TransactionService
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-@router.get("/", response_model=list[TransactionResponse])
+@router.get("/", response_model=PaginatedResponse[TransactionResponse])
 def list_transactions(
+    skip: int = 0,
+    limit: int = 100,
     asset_id: UUID | None = None,
     transaction_type: TransactionType | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[TransactionResponse]:
+) -> PaginatedResponse[TransactionResponse]:
     service = TransactionService(db)
-    return service.list_transactions(
+    items, total = service.list_transactions(
         user_id=current_user.id,
         asset_id=asset_id,
         transaction_type=transaction_type,
         start_date=start_date,
         end_date=end_date,
+        skip=skip,
+        limit=limit,
     )
+    return PaginatedResponse[TransactionResponse](items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
