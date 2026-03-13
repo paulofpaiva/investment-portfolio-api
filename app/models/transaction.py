@@ -49,6 +49,14 @@ class Transaction(Base):
         price_per_unit = Decimal(self.price_per_unit or 0)
         self.total_value = quantity * price_per_unit
 
+    @property
+    def asset_ticker(self) -> str:
+        return self.asset.ticker
+
+    @property
+    def asset_name(self) -> str:
+        return self.asset.name
+
 
 @event.listens_for(Transaction, "before_insert")
 @event.listens_for(Transaction, "before_update")
