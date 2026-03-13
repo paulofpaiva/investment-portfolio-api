@@ -19,6 +19,7 @@ class Transaction(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    wallet_id: Mapped[UUID] = mapped_column(ForeignKey("wallets.id"), nullable=False, index=True)
     asset_id: Mapped[UUID] = mapped_column(ForeignKey("assets.id"), nullable=False, index=True)
     transaction_type: Mapped[TransactionType] = mapped_column(
         SqlEnum(
@@ -42,6 +43,7 @@ class Transaction(Base):
         server_default=func.now(),
     )
     user: Mapped["User"] = relationship(back_populates="transactions")
+    wallet: Mapped["Wallet"] = relationship(back_populates="transactions")
     asset: Mapped["Asset"] = relationship(back_populates="transactions")
 
     def __init__(self, **kwargs: object) -> None:
