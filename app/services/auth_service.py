@@ -11,6 +11,7 @@ from app.core.errors import build_http_error
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.models.user import User
+from app.models.wallet import Wallet
 from app.schemas.user import UserCreate
 
 
@@ -41,7 +42,9 @@ class AuthService:
             email=payload.email,
             hashed_password=hash_password(payload.password),
         )
+        default_wallet = Wallet(name="Default", is_default=True, user=user)
         self.db.add(user)
+        self.db.add(default_wallet)
         try:
             self.db.commit()
         except IntegrityError as exc:

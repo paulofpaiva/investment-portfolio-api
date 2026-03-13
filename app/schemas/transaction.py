@@ -19,6 +19,7 @@ class TransactionResponse(BaseModel):
 
     id: UUID
     user_id: UUID
+    wallet_id: UUID
     asset_id: UUID
     transaction_type: TransactionType
     quantity: Decimal
