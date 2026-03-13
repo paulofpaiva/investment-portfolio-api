@@ -14,10 +14,21 @@ app = FastAPI(
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
-    message = exc.detail if isinstance(exc.detail, str) else "Request failed."
+    if isinstance(exc.detail, dict):
+        content = {
+            "message": exc.detail.get("message", "Request failed."),
+            "error_code": exc.detail.get("error_code", "HTTP_ERROR"),
+            "status_code": exc.detail.get("status_code", exc.status_code),
+        }
+    else:
+        content = {
+            "message": str(exc.detail),
+            "error_code": "HTTP_ERROR",
+            "status_code": exc.status_code,
+        }
     return JSONResponse(
         status_code=exc.status_code,
-        content={"message": message},
+        content=content,
         headers=exc.headers,
     )
 
@@ -27,7 +38,11 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError) 
     del exc
     return JSONResponse(
         status_code=400,
-        content={"message": "Invalid request payload."},
+        content={
+            "message": "Invalid request payload.",
+            "error_code": "VALIDATION_ERROR",
+            "status_code": 400,
+        },
     )
 
 
@@ -36,7 +51,11 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
     del exc
     return JSONResponse(
         status_code=500,
-        content={"message": "Internal server error."},
+        content={
+            "message": "Internal server error.",
+            "error_code": "INTERNAL_SERVER_ERROR",
+            "status_code": 500,
+        },
     )
 
 
