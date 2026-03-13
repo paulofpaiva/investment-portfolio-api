@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import build_http_error
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.models.user import User
@@ -30,9 +31,10 @@ class AuthService:
     def register_user(self, payload: UserCreate) -> User:
         existing_user = self.get_user_by_email(payload.email)
         if existing_user is not None:
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email is already registered.",
+                message="Email is already registered.",
+                error_code="EMAIL_ALREADY_REGISTERED",
             )
 
         user = User(
@@ -44,9 +46,10 @@ class AuthService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email is already registered.",
+                message="Email is already registered.",
+                error_code="EMAIL_ALREADY_REGISTERED",
             ) from exc
         self.db.refresh(user)
         return user
@@ -54,9 +57,10 @@ class AuthService:
     def authenticate_user(self, email: str, password: str) -> User:
         user = self.get_user_by_email(email)
         if user is None or not verify_password(password, user.hashed_password):
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid credentials.",
+                message="Invalid credentials.",
+                error_code="INVALID_CREDENTIALS",
             )
         return user
 
@@ -72,15 +76,17 @@ def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
-    credentials_exception = HTTPException(
+    credentials_exception = build_http_error(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Could not validate credentials.",
+        message="Could not validate credentials.",
+        error_code="INVALID_AUTH_TOKEN",
     )
 
     if token is None:
-        raise HTTPException(
+        raise build_http_error(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Authentication token is required.",
+            message="Authentication token is required.",
+            error_code="AUTH_TOKEN_REQUIRED",
         )
 
     try:

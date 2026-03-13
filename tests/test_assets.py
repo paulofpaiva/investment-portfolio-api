@@ -87,7 +87,11 @@ def test_delete_asset_with_transactions_returns_400(
     response = client.delete(f"/api/v1/assets/{asset_id}", headers=auth_headers)
 
     assert response.status_code == 400
-    assert response.json() == {"message": "Cannot delete asset with existing transactions."}
+    assert response.json() == {
+        "message": "Cannot delete asset with existing transactions.",
+        "error_code": "ASSET_HAS_TRANSACTIONS",
+        "status_code": 400,
+    }
 
 
 def test_create_duplicate_asset_returns_400(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -96,11 +100,19 @@ def test_create_duplicate_asset_returns_400(client: TestClient, auth_headers: di
     response = client.post("/api/v1/assets/", json=create_asset_payload(), headers=auth_headers)
 
     assert response.status_code == 400
-    assert response.json() == {"message": "Asset with this ticker already exists."}
+    assert response.json() == {
+        "message": "Asset with this ticker already exists.",
+        "error_code": "ASSET_TICKER_EXISTS",
+        "status_code": 400,
+    }
 
 
 def test_access_without_token_returns_400(client: TestClient) -> None:
     response = client.get("/api/v1/assets/")
 
     assert response.status_code == 400
-    assert response.json() == {"message": "Authentication token is required."}
+    assert response.json() == {
+        "message": "Authentication token is required.",
+        "error_code": "AUTH_TOKEN_REQUIRED",
+        "status_code": 400,
+    }

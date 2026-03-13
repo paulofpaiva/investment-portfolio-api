@@ -1,16 +1,22 @@
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 
-def create_asset(client: TestClient, auth_headers: dict[str, str], ticker: str = "AAPL") -> dict[str, str]:
+def create_asset(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    ticker: str = "AAPL",
+    current_price: float = 189.50,
+) -> dict[str, str]:
     response = client.post(
         "/api/v1/assets/",
         json={
             "ticker": ticker,
             "name": f"{ticker} Asset",
             "asset_type": "stock",
-            "current_price": 189.50,
+            "current_price": current_price,
         },
         headers=auth_headers,
     )
@@ -179,4 +185,101 @@ def test_create_transaction_with_invalid_asset_returns_400(
     )
 
     assert response.status_code == 400
-    assert response.json() == {"message": "Asset not found."}
+    assert response.json() == {
+        "message": "Asset not found.",
+        "error_code": "ASSET_NOT_FOUND",
+        "status_code": 400,
+    }
+
+
+def test_cannot_sell_more_than_current_position_returns_400(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    asset = create_asset(client, auth_headers)
+    client.post(
+        "/api/v1/transactions/",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "buy",
+            "quantity": 2,
+            "price_per_unit": 189.50,
+        },
+        headers=auth_headers,
+    )
+
+    response = client.post(
+        "/api/v1/transactions/",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "sell",
+            "quantity": 3,
+            "price_per_unit": 200.00,
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "message": "Cannot sell more than the current asset position.",
+        "error_code": "INSUFFICIENT_ASSET_POSITION",
+        "status_code": 400,
+    }
+
+
+def test_portfolio_summary_separates_realized_and_unrealized_profit_loss(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    asset = create_asset(client, auth_headers, ticker="NVDA", current_price=130.00)
+    client.post(
+        "/api/v1/transactions/",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "buy",
+            "quantity": 10,
+            "price_per_unit": 100.00,
+        },
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/transactions/",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "buy",
+            "quantity": 10,
+            "price_per_unit": 120.00,
+        },
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/transactions/",
+        json={
+            "asset_id": asset["id"],
+            "transaction_type": "sell",
+            "quantity": 5,
+            "price_per_unit": 150.00,
+        },
+        headers=auth_headers,
+    )
+
+    response = client.get("/api/v1/portfolio/summary", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert Decimal(data["total_invested"]) == Decimal("1650.00")
+    assert Decimal(data["total_realized_profit_loss"]) == Decimal("200.00")
+    assert Decimal(data["total_unrealized_profit_loss"]) == Decimal("300.00")
+    assert Decimal(data["total_current_value"]) == Decimal("1950.00")
+    assert Decimal(data["total_profit_loss"]) == Decimal("500.00")
+    assert len(data["assets"]) == 1
+    asset_summary = data["assets"][0]
+    assert asset_summary["ticker"] == "NVDA"
+    assert Decimal(asset_summary["total_quantity"]) == Decimal("15.00")
+    assert Decimal(asset_summary["average_price"]) == Decimal("110.00")
+    assert Decimal(asset_summary["current_price"]) == Decimal("130.00")
+    assert Decimal(asset_summary["current_value"]) == Decimal("1950.00")
+    assert Decimal(asset_summary["realized_profit_loss"]) == Decimal("200.00")
+    assert Decimal(asset_summary["unrealized_profit_loss"]) == Decimal("300.00")
+    assert Decimal(asset_summary["profit_loss"]) == Decimal("500.00")
+    assert Decimal(asset_summary["profit_loss_pct"]) == Decimal("22.72727272727272727272727273")

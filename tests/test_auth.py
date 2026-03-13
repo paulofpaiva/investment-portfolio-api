@@ -33,4 +33,8 @@ def test_login_with_wrong_password_returns_400(
     )
 
     assert response.status_code == 400
-    assert response.json() == {"message": "Invalid credentials."}
+    assert response.json() == {
+        "message": "Invalid credentials.",
+        "error_code": "INVALID_CREDENTIALS",
+        "status_code": 400,
+    }

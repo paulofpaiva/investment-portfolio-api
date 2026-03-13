@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.errors import build_http_error
 from app.models.asset import Asset
 from app.models.transaction import Transaction
 from app.schemas.asset import AssetCreate, AssetUpdate
@@ -25,9 +26,10 @@ class AssetService:
     def get_asset_by_id(self, asset_id: UUID) -> Asset:
         asset = self.db.get(Asset, asset_id)
         if asset is None:
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Asset not found.",
+                message="Asset not found.",
+                error_code="ASSET_NOT_FOUND",
             )
         return asset
 
@@ -42,9 +44,10 @@ class AssetService:
     def create_asset(self, payload: AssetCreate) -> Asset:
         existing_asset = self.get_asset_by_ticker(payload.ticker)
         if existing_asset is not None:
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Asset with this ticker already exists.",
+                message="Asset with this ticker already exists.",
+                error_code="ASSET_TICKER_EXISTS",
             )
 
         asset = Asset(**payload.model_dump())
@@ -53,9 +56,10 @@ class AssetService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Asset with this ticker already exists.",
+                message="Asset with this ticker already exists.",
+                error_code="ASSET_TICKER_EXISTS",
             ) from exc
         self.db.refresh(asset)
         return asset
@@ -65,9 +69,10 @@ class AssetService:
         if payload.ticker is not None and payload.ticker != asset.ticker:
             existing_asset = self.get_asset_by_ticker(payload.ticker)
             if existing_asset is not None:
-                raise HTTPException(
+                raise build_http_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Asset with this ticker already exists.",
+                    message="Asset with this ticker already exists.",
+                    error_code="ASSET_TICKER_EXISTS",
                 )
 
         for field, value in payload.model_dump(exclude_unset=True).items():
@@ -76,9 +81,10 @@ class AssetService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Asset with this ticker already exists.",
+                message="Asset with this ticker already exists.",
+                error_code="ASSET_TICKER_EXISTS",
             ) from exc
         self.db.refresh(asset)
         return asset
@@ -86,9 +92,10 @@ class AssetService:
     def delete_asset(self, asset_id: UUID) -> None:
         asset = self.get_asset_by_id(asset_id)
         if self.asset_has_transactions(asset_id):
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete asset with existing transactions.",
+                message="Cannot delete asset with existing transactions.",
+                error_code="ASSET_HAS_TRANSACTIONS",
             )
 
         self.db.delete(asset)
@@ -96,7 +103,8 @@ class AssetService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete asset with existing transactions.",
+                message="Cannot delete asset with existing transactions.",
+                error_code="ASSET_HAS_TRANSACTIONS",
             ) from exc
