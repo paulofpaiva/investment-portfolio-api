@@ -2,11 +2,12 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.errors import build_http_error
 from app.models.asset import Asset
 from app.models.transaction import Transaction, TransactionType
 from app.schemas.transaction import (
@@ -19,6 +20,63 @@ from app.schemas.transaction import (
 class TransactionService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def _build_user_transactions_with_assets_query(self, user_id: UUID) -> Select[tuple[Transaction]]:
+        return (
+            select(Transaction)
+            .options(joinedload(Transaction.asset))
+            .where(Transaction.user_id == user_id)
+            .order_by(Transaction.transacted_at.asc(), Transaction.created_at.asc())
+        )
+
+    def _calculate_user_asset_state(
+        self,
+        user_id: UUID,
+        asset_id: UUID | None = None,
+    ) -> dict[UUID, dict[str, Decimal | Asset]]:
+        statement = self._build_user_transactions_with_assets_query(user_id)
+        if asset_id is not None:
+            statement = statement.where(Transaction.asset_id == asset_id)
+
+        transactions = list(self.db.execute(statement).scalars().all())
+        holdings: dict[UUID, dict[str, Decimal | Asset]] = {}
+
+        for transaction in transactions:
+            asset_state = holdings.setdefault(
+                transaction.asset_id,
+                {
+                    "asset": transaction.asset,
+                    "quantity": Decimal("0"),
+                    "cost_basis": Decimal("0"),
+                    "gross_invested": Decimal("0"),
+                    "realized_profit_loss": Decimal("0"),
+                },
+            )
+
+            quantity = Decimal(transaction.quantity)
+            price_per_unit = Decimal(transaction.price_per_unit)
+            current_quantity = Decimal(asset_state["quantity"])
+            current_cost_basis = Decimal(asset_state["cost_basis"])
+            current_gross_invested = Decimal(asset_state["gross_invested"])
+            current_realized = Decimal(asset_state["realized_profit_loss"])
+
+            if transaction.transaction_type == TransactionType.BUY:
+                asset_state["quantity"] = current_quantity + quantity
+                asset_state["cost_basis"] = current_cost_basis + (quantity * price_per_unit)
+                asset_state["gross_invested"] = current_gross_invested + (quantity * price_per_unit)
+                continue
+
+            if current_quantity <= 0 or quantity > current_quantity:
+                continue
+
+            average_price = current_cost_basis / current_quantity if current_quantity > 0 else Decimal("0")
+            realized_profit_loss = quantity * (price_per_unit - average_price)
+
+            asset_state["quantity"] = current_quantity - quantity
+            asset_state["cost_basis"] = current_cost_basis - (quantity * average_price)
+            asset_state["realized_profit_loss"] = current_realized + realized_profit_loss
+
+        return holdings
 
     def _build_filtered_transactions_query(
         self,
@@ -79,19 +137,35 @@ class TransactionService:
         )
         transaction = self.db.execute(statement).scalar_one_or_none()
         if transaction is None:
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Transaction not found.",
+                message="Transaction not found.",
+                error_code="TRANSACTION_NOT_FOUND",
             )
         return transaction
 
     def create_transaction(self, user_id: UUID, payload: TransactionCreate) -> Transaction:
         asset = self.db.get(Asset, payload.asset_id)
         if asset is None:
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Asset not found.",
+                message="Asset not found.",
+                error_code="ASSET_NOT_FOUND",
             )
+
+        if payload.transaction_type == TransactionType.SELL:
+            asset_state = self._calculate_user_asset_state(user_id=user_id, asset_id=payload.asset_id)
+            current_state = asset_state.get(payload.asset_id)
+            current_quantity = Decimal("0")
+            if current_state is not None:
+                current_quantity = Decimal(current_state["quantity"])
+
+            if Decimal(payload.quantity) > current_quantity:
+                raise build_http_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message="Cannot sell more than the current asset position.",
+                    error_code="INSUFFICIENT_ASSET_POSITION",
+                )
 
         transaction = Transaction(user_id=user_id, **payload.model_dump())
         self.db.add(transaction)
@@ -99,9 +173,10 @@ class TransactionService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unable to create transaction.",
+                message="Unable to create transaction.",
+                error_code="TRANSACTION_CREATE_FAILED",
             ) from exc
         self.db.refresh(transaction)
         return self.get_transaction_by_id(transaction.id, user_id)
@@ -113,72 +188,42 @@ class TransactionService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise HTTPException(
+            raise build_http_error(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unable to delete transaction.",
+                message="Unable to delete transaction.",
+                error_code="TRANSACTION_DELETE_FAILED",
             ) from exc
 
     def get_portfolio_summary(self, user_id: UUID) -> PortfolioSummaryResponse:
-        statement: Select[tuple[Transaction]] = (
-            select(Transaction)
-            .options(joinedload(Transaction.asset))
-            .where(Transaction.user_id == user_id)
-            .order_by(Transaction.transacted_at.asc(), Transaction.created_at.asc())
-        )
-        transactions = list(self.db.execute(statement).scalars().all())
-
-        holdings: dict[UUID, dict[str, Decimal | Asset]] = {}
-
-        for transaction in transactions:
-            asset_state = holdings.setdefault(
-                transaction.asset_id,
-                {
-                    "asset": transaction.asset,
-                    "quantity": Decimal("0"),
-                    "invested": Decimal("0"),
-                },
-            )
-
-            quantity = Decimal(transaction.quantity)
-            price_per_unit = Decimal(transaction.price_per_unit)
-            current_quantity = Decimal(asset_state["quantity"])
-            current_invested = Decimal(asset_state["invested"])
-
-            if transaction.transaction_type == TransactionType.BUY:
-                asset_state["quantity"] = current_quantity + quantity
-                asset_state["invested"] = current_invested + (quantity * price_per_unit)
-                continue
-
-            if current_quantity <= 0:
-                continue
-
-            sell_quantity = min(quantity, current_quantity)
-            average_price = current_invested / current_quantity if current_quantity > 0 else Decimal("0")
-            asset_state["quantity"] = current_quantity - sell_quantity
-            asset_state["invested"] = current_invested - (sell_quantity * average_price)
-
+        holdings = self._calculate_user_asset_state(user_id=user_id)
         asset_summaries: list[PortfolioAssetSummary] = []
         total_invested = Decimal("0")
+        total_realized_profit_loss = Decimal("0")
+        total_unrealized_profit_loss = Decimal("0")
         total_current_value = Decimal("0")
 
         for asset_state in holdings.values():
             total_quantity = Decimal(asset_state["quantity"])
-            invested = Decimal(asset_state["invested"])
+            cost_basis = Decimal(asset_state["cost_basis"])
+            gross_invested = Decimal(asset_state["gross_invested"])
+            realized_profit_loss = Decimal(asset_state["realized_profit_loss"])
 
             if total_quantity <= 0:
+                total_realized_profit_loss += realized_profit_loss
                 continue
 
             asset = asset_state["asset"]
             if not isinstance(asset, Asset):
                 continue
 
-            average_price = invested / total_quantity if total_quantity > 0 else Decimal("0")
+            average_price = cost_basis / total_quantity if total_quantity > 0 else Decimal("0")
             current_price = Decimal(asset.current_price)
             current_value = total_quantity * current_price
-            profit_loss = current_value - invested
+            unrealized_profit_loss = current_value - cost_basis
+            profit_loss = realized_profit_loss + unrealized_profit_loss
             profit_loss_pct = (
-                (profit_loss / invested) * Decimal("100")
-                if invested > 0
+                (profit_loss / gross_invested) * Decimal("100")
+                if gross_invested > 0
                 else Decimal("0")
             )
 
@@ -189,19 +234,25 @@ class TransactionService:
                     average_price=average_price,
                     current_price=current_price,
                     current_value=current_value,
+                    realized_profit_loss=realized_profit_loss,
+                    unrealized_profit_loss=unrealized_profit_loss,
                     profit_loss=profit_loss,
                     profit_loss_pct=profit_loss_pct,
                 )
             )
 
-            total_invested += invested
+            total_invested += cost_basis
+            total_realized_profit_loss += realized_profit_loss
+            total_unrealized_profit_loss += unrealized_profit_loss
             total_current_value += current_value
 
-        total_profit_loss = total_current_value - total_invested
+        total_profit_loss = total_realized_profit_loss + total_unrealized_profit_loss
 
         return PortfolioSummaryResponse(
             assets=sorted(asset_summaries, key=lambda item: item.ticker),
             total_invested=total_invested,
+            total_realized_profit_loss=total_realized_profit_loss,
+            total_unrealized_profit_loss=total_unrealized_profit_loss,
             total_current_value=total_current_value,
             total_profit_loss=total_profit_loss,
         )

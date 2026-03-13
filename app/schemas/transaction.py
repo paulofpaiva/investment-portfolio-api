@@ -36,6 +36,8 @@ class PortfolioAssetSummary(BaseModel):
     average_price: Decimal
     current_price: Decimal
     current_value: Decimal
+    realized_profit_loss: Decimal
+    unrealized_profit_loss: Decimal
     profit_loss: Decimal
     profit_loss_pct: Decimal
 
@@ -43,5 +45,7 @@ class PortfolioAssetSummary(BaseModel):
 class PortfolioSummaryResponse(BaseModel):
     assets: list[PortfolioAssetSummary]
     total_invested: Decimal
+    total_realized_profit_loss: Decimal
+    total_unrealized_profit_loss: Decimal
     total_current_value: Decimal
     total_profit_loss: Decimal
