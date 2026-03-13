@@ -16,6 +16,7 @@ REST API for investment portfolio management built with FastAPI, PostgreSQL, SQL
 ### Docker
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
@@ -48,8 +49,19 @@ DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/investment_p
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
 API: `http://localhost:8000`  
 Docs: `http://localhost:8000/docs`
+
+## Postman
+
+Import `Investment Portfolio API.postman_collection.json` into Postman and run the requests in order.
+
+Recommended variables:
+
+- `base_url`: `http://localhost:8000`
+- `email`: your test email
+- `password`: your test password

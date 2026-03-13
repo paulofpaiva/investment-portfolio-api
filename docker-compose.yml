@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: investment-portfolio-db
     environment:
-      POSTGRES_DB: investment_portfolio
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-investment_portfolio}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d investment_portfolio"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-investment_portfolio}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: investment-portfolio-api
     env_file:
-      - .env.example
+      - .env
     ports:
       - "8000:8000"
     volumes:
