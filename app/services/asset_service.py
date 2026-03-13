@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.asset import Asset
+from app.models.transaction import Transaction
 from app.schemas.asset import AssetCreate, AssetUpdate
 
 
@@ -29,6 +30,10 @@ class AssetService:
     def get_asset_by_ticker(self, ticker: str) -> Asset | None:
         statement = select(Asset).where(Asset.ticker == ticker)
         return self.db.execute(statement).scalar_one_or_none()
+
+    def asset_has_transactions(self, asset_id: UUID) -> bool:
+        statement = select(Transaction.id).where(Transaction.asset_id == asset_id).limit(1)
+        return self.db.execute(statement).scalar_one_or_none() is not None
 
     def create_asset(self, payload: AssetCreate) -> Asset:
         existing_asset = self.get_asset_by_ticker(payload.ticker)
@@ -76,5 +81,18 @@ class AssetService:
 
     def delete_asset(self, asset_id: UUID) -> None:
         asset = self.get_asset_by_id(asset_id)
+        if self.asset_has_transactions(asset_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete asset with existing transactions.",
+            )
+
         self.db.delete(asset)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete asset with existing transactions.",
+            ) from exc
