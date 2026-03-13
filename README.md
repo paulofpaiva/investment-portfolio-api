@@ -1,6 +1,6 @@
 # Investment Portfolio API
 
-API REST para gerenciamento de carteira de investimentos construída com FastAPI, PostgreSQL, SQLAlchemy, Alembic e Docker.
+REST API for investment portfolio management built with FastAPI, PostgreSQL, SQLAlchemy, Alembic, and Docker.
 
 ## Stack
 
@@ -12,21 +12,21 @@ API REST para gerenciamento de carteira de investimentos construída com FastAPI
 - Docker
 - Pytest
 
-## Estrutura
+## Architecture
 
-O projeto segue uma arquitetura em camadas com separação entre:
+The project follows a layered architecture with clear separation between:
 
-- `api`: endpoints e roteamento
-- `core`: configurações e segurança
-- `db`: engine, sessão e base declarativa
-- `models`: entidades ORM
-- `schemas`: contratos de entrada e saída
-- `services`: regras de negócio
-- `tests`: testes automatizados
+- `api`: endpoints and routing
+- `core`: settings and security
+- `db`: engine, session, and declarative base
+- `models`: ORM entities
+- `schemas`: input and output contracts
+- `services`: business rules
+- `tests`: automated tests
 
-## Como executar
+## Running the Project
 
-### Localmente
+### Locally
 
 ```bash
 python -m venv .venv
@@ -35,16 +35,16 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### Com Docker
+### With Docker
 
 ```bash
 docker compose up --build
 ```
 
-## Próximos passos
+## Next Steps
 
-- Configurar settings com `pydantic-settings`
-- Implementar autenticação JWT
-- Criar models e migrations iniciais
-- Desenvolver endpoints de auth, assets e transactions
-- Cobrir fluxos com testes automatizados
+- Configure application settings with `pydantic-settings`
+- Implement JWT authentication
+- Create the initial models and migrations
+- Build auth, assets, and transactions endpoints
+- Cover the main flows with automated tests
