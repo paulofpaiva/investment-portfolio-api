@@ -22,9 +22,26 @@ transaction_type_enum = sa.Enum("buy", "sell", name="transaction_type_enum", cre
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    asset_type_enum.create(bind, checkfirst=True)
-    transaction_type_enum.create(bind, checkfirst=True)
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            CREATE TYPE asset_type_enum AS ENUM ('stock', 'crypto', 'fii');
+        EXCEPTION
+            WHEN duplicate_object THEN NULL;
+        END $$;
+        """
+    )
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            CREATE TYPE transaction_type_enum AS ENUM ('buy', 'sell');
+        EXCEPTION
+            WHEN duplicate_object THEN NULL;
+        END $$;
+        """
+    )
 
     op.create_table(
         "users",
