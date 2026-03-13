@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,18 +26,51 @@ class AssetService:
             )
         return asset
 
+    def get_asset_by_ticker(self, ticker: str) -> Asset | None:
+        statement = select(Asset).where(Asset.ticker == ticker)
+        return self.db.execute(statement).scalar_one_or_none()
+
     def create_asset(self, payload: AssetCreate) -> Asset:
+        existing_asset = self.get_asset_by_ticker(payload.ticker)
+        if existing_asset is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asset with this ticker already exists.",
+            )
+
         asset = Asset(**payload.model_dump())
         self.db.add(asset)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asset with this ticker already exists.",
+            ) from exc
         self.db.refresh(asset)
         return asset
 
     def update_asset(self, asset_id: UUID, payload: AssetUpdate) -> Asset:
         asset = self.get_asset_by_id(asset_id)
+        if payload.ticker is not None and payload.ticker != asset.ticker:
+            existing_asset = self.get_asset_by_ticker(payload.ticker)
+            if existing_asset is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Asset with this ticker already exists.",
+                )
+
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(asset, field, value)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asset with this ticker already exists.",
+            ) from exc
         self.db.refresh(asset)
         return asset
 
